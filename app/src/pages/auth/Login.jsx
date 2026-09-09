@@ -1,14 +1,27 @@
 import { useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { signUp, confirmSignUp, resendSignUpCode, signIn } from 'aws-amplify/auth'
 import ClientNav from '../../components/ClientNav'
 import { Button, Card, Checkbox, Field, H2, H3, Line, Mono, P, Tabs } from '../../components/ui'
 import { useStore } from '../../lib/store'
 
 const SCHOOL_DOMAINS = ['purdue.edu', 'ivytech.edu']
 
+const PASSWORD_HINT = 'At least 8 characters, with an uppercase letter, a lowercase letter, a number, and a special character.'
+
 function isSchoolEmail(email) {
   const domain = email.split('@')[1]?.toLowerCase()
   return SCHOOL_DOMAINS.includes(domain)
+}
+
+function isValidPassword(password) {
+  return (
+    password.length >= 8 &&
+    /[A-Z]/.test(password) &&
+    /[a-z]/.test(password) &&
+    /[0-9]/.test(password) &&
+    /[^A-Za-z0-9]/.test(password)
+  )
 }
 
 export default function Login() {
@@ -24,6 +37,7 @@ export default function Login() {
   const [agreed, setAgreed] = useState(false)
   const [code, setCode] = useState('')
   const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
 
   const holding = location.state?.holding
   const redirect = location.state?.redirect ?? '/account'
@@ -32,17 +46,26 @@ export default function Login() {
     navigate(redirect)
   }
 
-  function handleLogin(e) {
+  async function handleLogin(e) {
     e.preventDefault()
     if (!isSchoolEmail(email)) {
       setError('Only @purdue.edu and @ivytech.edu can sign up')
       return
     }
-    dispatch({ type: 'LOGIN', payload: { email } })
-    goAfterAuth()
+    setError('')
+    setSubmitting(true)
+    try {
+      await signIn({ username: email, password })
+      dispatch({ type: 'LOGIN', payload: { email } })
+      goAfterAuth()
+    } catch (err) {
+      setError(err.message || 'Could not log in')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
-  function handleSignup(e) {
+  async function handleSignup(e) {
     e.preventDefault()
     if (!isSchoolEmail(email)) {
       setError('Only @purdue.edu and @ivytech.edu can sign up')
@@ -52,15 +75,50 @@ export default function Login() {
       setError('Please agree to the terms to continue')
       return
     }
+    if (!isValidPassword(password)) {
+      setError(PASSWORD_HINT)
+      return
+    }
     setError('')
-    dispatch({ type: 'SIGNUP', payload: { name, email } })
-    setMode('verify')
+    setSubmitting(true)
+    try {
+      await signUp({
+        username: email,
+        password,
+        options: { userAttributes: { email, name } },
+      })
+      setMode('verify')
+    } catch (err) {
+      setError(err.message || 'Could not create account')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
-  function handleVerify(e) {
+  async function handleVerify(e) {
     e.preventDefault()
-    dispatch({ type: 'VERIFY_EMAIL' })
-    goAfterAuth()
+    setError('')
+    setSubmitting(true)
+    try {
+      await confirmSignUp({ username: email, confirmationCode: code })
+      await signIn({ username: email, password })
+      dispatch({ type: 'SIGNUP', payload: { name, email } })
+      dispatch({ type: 'VERIFY_EMAIL' })
+      goAfterAuth()
+    } catch (err) {
+      setError(err.message || 'Could not verify code')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function handleResendCode() {
+    setError('')
+    try {
+      await resendSignUpCode({ username: email })
+    } catch (err) {
+      setError(err.message || 'Could not resend code')
+    }
   }
 
   function quickLogin(demoEmail) {
@@ -117,7 +175,9 @@ export default function Login() {
                     />
                   </Field>
                   {error && <P className="text-red-600">{error}</P>}
-                  <Button type="submit">Log in & continue</Button>
+                  <Button type="submit" disabled={submitting}>
+                    {submitting ? 'Logging in…' : 'Log in & continue'}
+                  </Button>
                   <Mono>Forgot password · Why do we need a school email?</Mono>
 
                   <Line className="my-1" />
@@ -159,18 +219,22 @@ export default function Login() {
                     <input
                       required
                       type="password"
+                      minLength={8}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       className="border border-border-field bg-white rounded-md px-3 py-2.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-gold"
                     />
                   </Field>
+                  <Mono>{PASSWORD_HINT}</Mono>
                   <Checkbox
                     checked={agreed}
                     onChange={(e) => setAgreed(e.target.checked)}
                     label="I'm 18+, and I agree to the Terms, Privacy Policy, and the liability disclaimer."
                   />
                   {error && <P className="text-red-600">{error}</P>}
-                  <Button type="submit">Create account & continue</Button>
+                  <Button type="submit" disabled={submitting}>
+                    {submitting ? 'Creating account…' : 'Create account & continue'}
+                  </Button>
                   <Mono>Next: check your inbox for a 6-digit code.</Mono>
                 </form>
               )}
@@ -188,8 +252,13 @@ export default function Login() {
                   className="border border-border-field bg-surface-muted rounded-md px-3 py-2.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-gold"
                 />
               </Field>
-              <Button type="submit">Verify & continue</Button>
-              <Mono>Resend code</Mono>
+              {error && <P className="text-red-600">{error}</P>}
+              <Button type="submit" disabled={submitting}>
+                {submitting ? 'Verifying…' : 'Verify & continue'}
+              </Button>
+              <button type="button" onClick={handleResendCode} className="text-left">
+                <Mono>Resend code</Mono>
+              </button>
             </form>
           )}
         </div>

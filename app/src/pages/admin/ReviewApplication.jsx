@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import DashboardNav from '../../components/DashboardNav'
-import { Box, Button, Line, Mono, P, TextArea } from '../../components/ui'
-import { useStore } from '../../lib/store'
+import { Button, Line, Mono, P, TextArea } from '../../components/ui'
+import { api } from '../../lib/api'
 
 const ADMIN_LINKS = [
   { to: '/admin', label: 'Applications' },
@@ -12,23 +12,39 @@ const ADMIN_LINKS = [
 
 export default function ReviewApplication() {
   const { applicationId } = useParams()
-  const { state, dispatch } = useStore()
   const navigate = useNavigate()
   const [note, setNote] = useState('')
+  const [application, setApplication] = useState(undefined) // undefined = loading, null = not found
 
-  const application = state.applications.find((a) => a.id === applicationId)
+  useEffect(() => {
+    api
+      .get('/api/applications')
+      .then((apps) => setApplication(apps.find((a) => a.id === applicationId) ?? null))
+      .catch(() => setApplication(null))
+  }, [applicationId])
+
+  if (application === undefined) {
+    return (
+      <div className="min-h-screen">
+        <DashboardNav mode="admin" links={ADMIN_LINKS} />
+        <div className="p-6">
+          <Mono>Loading…</Mono>
+        </div>
+      </div>
+    )
+  }
   if (!application) return <Navigate to="/admin" replace />
 
-  function approve() {
-    dispatch({ type: 'APPROVE_APPLICATION_TO_PROVIDER', payload: { applicationId } })
+  async function approve() {
+    await api.patch(`/api/applications/${applicationId}`, { status: 'approved' })
     navigate('/admin')
   }
-  function requestInfo() {
-    dispatch({ type: 'UPDATE_APPLICATION_STATUS', payload: { id: applicationId, status: 'needs_info', internalNote: note } })
+  async function requestInfo() {
+    await api.patch(`/api/applications/${applicationId}`, { status: 'needs_info', internalNote: note })
     navigate('/admin')
   }
-  function reject() {
-    dispatch({ type: 'UPDATE_APPLICATION_STATUS', payload: { id: applicationId, status: 'rejected', internalNote: note } })
+  async function reject() {
+    await api.patch(`/api/applications/${applicationId}`, { status: 'rejected', internalNote: note })
     navigate('/admin')
   }
 
@@ -39,7 +55,7 @@ export default function ReviewApplication() {
         <div className="w-full max-w-[420px] border border-border-card rounded-lg bg-white p-5 flex flex-col gap-3">
           <p className="text-[16px] font-semibold">{application.businessName}</p>
           <Mono>
-            {application.category} · {application.email} · applied {application.submittedAt}
+            {application.category} · {application.email} · applied {new Date(application.submittedAt).toLocaleDateString()}
           </Mono>
           <Line />
           <P>

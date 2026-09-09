@@ -1,11 +1,11 @@
-import { Fragment, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import DashboardNav from '../../components/DashboardNav'
 import { Button, Mono, P } from '../../components/ui'
 import { useMyProvider } from '../../lib/useMyProvider'
-import { useStore } from '../../lib/store'
+import { api } from '../../lib/api'
 import { hashInt, dateForOffset } from '../../lib/data'
-import { formatDayShort } from '../../lib/format'
+import { formatDayShort, dayOffsetOf } from '../../lib/format'
 
 const HOURS = Array.from({ length: 13 }, (_, i) => 8 + i) // 8am - 8pm
 const DAY_OFFSETS = [0, 1, 2, 3, 4, 5, 6]
@@ -26,13 +26,10 @@ function defaultFree(providerId, day, hour) {
 
 export default function Availability() {
   const { provider } = useMyProvider()
-  const { state, dispatch } = useStore()
   const navigate = useNavigate()
 
   const initialGrid = useMemo(() => {
     if (!provider) return {}
-    const stored = provider.availabilityGrid
-    if (stored) return stored
     const grid = {}
     for (const day of DAY_OFFSETS) {
       for (const hour of HOURS) {
@@ -45,20 +42,33 @@ export default function Availability() {
   const [grid, setGrid] = useState(initialGrid)
   const [dragValue, setDragValue] = useState(null)
   const [saved, setSaved] = useState(true)
+  const [bookings, setBookings] = useState([])
 
-  if (!provider) return <Navigate to="/provide" replace />
+  useEffect(() => {
+    setGrid(initialGrid)
+  }, [initialGrid])
+
+  useEffect(() => {
+    if (!provider) return
+    api.get('/api/bookings/provider').then(setBookings).catch(() => {})
+  }, [provider])
 
   const bookedSet = useMemo(() => {
     const set = new Set()
-    state.bookings
-      .filter((b) => b.providerId === provider.id && (b.status === 'confirmed' || b.status === 'requested'))
+    bookings
+      .filter((b) => b.status === 'confirmed' || b.status === 'requested')
       .forEach((b) => {
-        const startHour = Math.floor(b.start / 60)
-        const endHour = Math.ceil((b.start + b.duration) / 60)
-        for (let h = startHour; h < endHour; h++) set.add(cellKey(b.dayOffset, h))
+        const start = new Date(b.startAt)
+        const startMinutes = start.getHours() * 60 + start.getMinutes()
+        const startHour = Math.floor(startMinutes / 60)
+        const endHour = Math.ceil((startMinutes + b.durationMinutes) / 60)
+        const day = dayOffsetOf(start)
+        for (let h = startHour; h < endHour; h++) set.add(cellKey(day, h))
       })
     return set
-  }, [state.bookings, provider.id])
+  }, [bookings])
+
+  if (!provider) return <Navigate to="/provide" replace />
 
   function paint(day, hour, value) {
     if (bookedSet.has(cellKey(day, hour))) return
@@ -84,7 +94,8 @@ export default function Availability() {
   }
 
   function handleSave() {
-    dispatch({ type: 'UPDATE_PROVIDER_AVAILABILITY', payload: { providerId: provider.id, grid } })
+    // No availability-grid endpoint on the backend yet — this just confirms
+    // the local paint session; it doesn't persist across a reload.
     setSaved(true)
   }
 

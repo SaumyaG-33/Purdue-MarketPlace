@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import ClientNav from '../../components/ClientNav'
 import { Card, Chip, H2, H3, Mono, P, Slot } from '../../components/ui'
-import { CATEGORY_MAP, findService, providersForService, isProviderFreeOnDay, anyFreeProviderOnDay, dateForOffset } from '../../lib/data'
+import { CATEGORY_MAP, findService, isProviderFreeOnDay, anyFreeProviderOnDay, dateForOffset } from '../../lib/data'
 import { formatDay, formatMonthYear } from '../../lib/format'
+import { api } from '../../lib/api'
 
 const WEEKDAY_LETTERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
 
@@ -13,12 +14,24 @@ export default function AvailabilityProviders() {
   const found = findService(serviceId)
   const category = CATEGORY_MAP[categoryId]
 
-  const firstFreeOffset = useMemo(() => {
-    for (let i = 0; i < 21; i++) if (anyFreeProviderOnDay(serviceId, i)) return i
-    return 0
+  const [providers, setProviders] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    setLoading(true)
+    api
+      .get(`/api/providers?serviceId=${encodeURIComponent(serviceId)}`)
+      .then(setProviders)
+      .finally(() => setLoading(false))
   }, [serviceId])
 
-  const [selectedOffset, setSelectedOffset] = useState(firstFreeOffset)
+  const firstFreeOffset = useMemo(() => {
+    for (let i = 0; i < 21; i++) if (anyFreeProviderOnDay(providers, i)) return i
+    return 0
+  }, [providers])
+
+  const [selectedOffset, setSelectedOffset] = useState(0)
+  useEffect(() => setSelectedOffset(firstFreeOffset), [firstFreeOffset])
 
   if (!found || !category) {
     return (
@@ -36,7 +49,7 @@ export default function AvailabilityProviders() {
   const startOffset = -todayDate.getDay()
   const days = Array.from({ length: 28 }, (_, i) => startOffset + i)
 
-  const freeProviders = providersForService(serviceId).filter((p) => isProviderFreeOnDay(p.id, selectedOffset))
+  const freeProviders = providers.filter((p) => isProviderFreeOnDay(p.id, selectedOffset))
   const selectedDate = dateForOffset(selectedOffset)
 
   return (
@@ -73,7 +86,7 @@ export default function AvailabilityProviders() {
             ))}
             {days.map((offset) => {
               const inPast = offset < 0
-              const isFree = !inPast && anyFreeProviderOnDay(serviceId, offset)
+              const isFree = !inPast && anyFreeProviderOnDay(providers, offset)
               const isSelected = offset === selectedOffset
               const d = dateForOffset(offset)
               return (
@@ -99,7 +112,8 @@ export default function AvailabilityProviders() {
           <H3>
             {formatDay(selectedDate)} — {freeProviders.length} provider{freeProviders.length === 1 ? '' : 's'} free
           </H3>
-          {freeProviders.length === 0 && (
+          {loading && <Mono>Loading…</Mono>}
+          {!loading && freeProviders.length === 0 && (
             <Card>
               <P>No one's offering {service.name.toLowerCase()} yet — get notified when someone is.</P>
             </Card>
@@ -110,7 +124,7 @@ export default function AvailabilityProviders() {
               <div className="flex-1 min-w-0">
                 <H3>{p.name}</H3>
                 <Mono>
-                  ★{p.rating} ({p.reviewCount}) · {p.services[0].name} ${p.services[0].price} · {p.area}
+                  ★{p.rating} ({p.reviewCount}) {p.services?.[0] && `· ${p.services[0].name} $${p.services[0].price}`} · {p.area}
                 </Mono>
               </div>
               <span

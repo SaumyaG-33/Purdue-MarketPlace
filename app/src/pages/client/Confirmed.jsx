@@ -1,19 +1,18 @@
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import ClientNav from '../../components/ClientNav'
 import { Box, Button, H2, Line, Mono, P } from '../../components/ui'
-import { dateForOffset } from '../../lib/data'
-import { firstNameOf, formatDay, minutesToLabel } from '../../lib/format'
-import { useStore } from '../../lib/store'
+import { firstNameOf, formatDay, timeLabel } from '../../lib/format'
+import { useAuth } from '../../lib/auth'
 
 export default function Confirmed() {
   const location = useLocation()
   const navigate = useNavigate()
-  const { currentUser } = useStore()
+  const { currentUser } = useAuth()
   const booking = location.state?.booking
 
   if (!booking) return <Navigate to="/" replace />
 
-  const day = dateForOffset(booking.dayOffset)
+  const start = new Date(booking.startAt)
   const providerFirstName = firstNameOf(booking.providerName) || 'your provider'
 
   return (
@@ -24,7 +23,7 @@ export default function Confirmed() {
           <Box className="w-10 h-10 rounded-full" />
           <H2>You're booked with {providerFirstName}</H2>
           <P>
-            {formatDay(day)}, {minutesToLabel(booking.start)} · {booking.serviceName} · ${booking.price}
+            {formatDay(start)}, {timeLabel(start)} · {booking.serviceName} · ${booking.price}
           </P>
           <Line />
           <Mono>

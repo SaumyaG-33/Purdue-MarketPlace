@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import DashboardNav from '../../components/DashboardNav'
 import { Card, H3, Mono, Tabs, TextArea } from '../../components/ui'
-import { useStore } from '../../lib/store'
+import { api } from '../../lib/api'
 
 const ADMIN_LINKS = [
   { to: '/admin', label: 'Applications' },
@@ -20,13 +20,40 @@ function ActionButton({ children, onClick }) {
   )
 }
 
+function strikeNote(strikes) {
+  return `${strikes} strike${strikes === 1 ? '' : 's'}`
+}
+
 export default function Suspensions() {
-  const { state, dispatch } = useStore()
   const [tab, setTab] = useState('providers')
   const [reasonNote, setReasonNote] = useState('')
+  const [providers, setProviders] = useState([])
+  const [clients, setClients] = useState([])
 
-  function setStatus(group, id, status) {
-    dispatch({ type: 'UPDATE_SUSPENSION', payload: { group, id, status } })
+  function refetch() {
+    api.get('/api/suspensions').then((data) => {
+      setProviders(data.providers)
+      setClients(data.clients)
+    })
+  }
+
+  useEffect(refetch, [])
+
+  async function setProviderStatus(id, status) {
+    await api.patch(`/api/providers/${id}/status`, { status })
+    refetch()
+  }
+  async function clearProviderStrike(id) {
+    await api.post(`/api/providers/${id}/clear-strike`)
+    refetch()
+  }
+  async function setClientStatus(id, status) {
+    await api.patch(`/api/users/${id}/status`, { status })
+    refetch()
+  }
+  async function clearClientStrike(id) {
+    await api.post(`/api/users/${id}/clear-strike`)
+    refetch()
   }
 
   return (
@@ -45,21 +72,22 @@ export default function Suspensions() {
         {tab === 'providers' && (
           <>
             <H3>Providers</H3>
-            {state.suspensions.providers.map((p) => (
-              <Card key={p.id} className={`flex-row items-center gap-2.5 ${p.status === 'flagged' ? 'border-l-[3px] border-l-gold-dark' : ''}`}>
+            {providers.length === 0 && <Mono>No approved providers yet.</Mono>}
+            {providers.map((p) => (
+              <Card key={p.id} className={`flex-row items-center gap-2.5 ${p.strikes >= 3 ? 'border-l-[3px] border-l-gold-dark' : ''}`}>
                 <div className="flex-1">
                   <H3>
                     {p.name} · <span className="capitalize font-normal">{p.categoryId}</span>
                   </H3>
-                  <Mono>{p.note}</Mono>
+                  <Mono>{strikeNote(p.strikes)}</Mono>
                 </div>
                 {p.status === 'removed' ? (
-                  <ActionButton onClick={() => setStatus('providers', p.id, 'active')}>Reinstate</ActionButton>
+                  <ActionButton onClick={() => setProviderStatus(p.id, 'active')}>Reinstate</ActionButton>
                 ) : (
                   <>
-                    <ActionButton onClick={() => setStatus('providers', p.id, 'removed')}>Remove listing</ActionButton>
-                    <ActionButton onClick={() => setStatus('providers', p.id, 'paused')}>Pause 30 days</ActionButton>
-                    <ActionButton onClick={() => setStatus('providers', p.id, 'active')}>Clear a strike</ActionButton>
+                    <ActionButton onClick={() => setProviderStatus(p.id, 'removed')}>Remove listing</ActionButton>
+                    <ActionButton onClick={() => setProviderStatus(p.id, 'paused')}>Pause 30 days</ActionButton>
+                    <ActionButton onClick={() => clearProviderStrike(p.id)}>Clear a strike</ActionButton>
                   </>
                 )}
               </Card>
@@ -70,19 +98,22 @@ export default function Suspensions() {
         {tab === 'clients' && (
           <>
             <H3>Clients</H3>
-            {state.suspensions.clients.map((c) => (
-              <Card key={c.id} className={`flex-row items-center gap-2.5 ${c.status === 'flagged' ? 'border-l-[3px] border-l-gold-dark' : ''}`}>
+            {clients.length === 0 && <Mono>No client accounts yet.</Mono>}
+            {clients.map((c) => (
+              <Card key={c.id} className={`flex-row items-center gap-2.5 ${c.strikes >= 3 ? 'border-l-[3px] border-l-gold-dark' : ''}`}>
                 <div className="flex-1">
                   <H3>{c.name}</H3>
-                  <Mono>{c.email} · {c.note}</Mono>
+                  <Mono>
+                    {c.email} · {strikeNote(c.strikes)}
+                  </Mono>
                 </div>
                 {c.status === 'blocked' ? (
-                  <ActionButton onClick={() => setStatus('clients', c.id, 'active')}>Unblock</ActionButton>
+                  <ActionButton onClick={() => setClientStatus(c.id, 'active')}>Unblock</ActionButton>
                 ) : (
                   <>
-                    <ActionButton onClick={() => setStatus('clients', c.id, 'blocked')}>Block account</ActionButton>
-                    <ActionButton onClick={() => setStatus('clients', c.id, 'warned')}>Warn by email</ActionButton>
-                    <ActionButton onClick={() => setStatus('clients', c.id, 'active')}>Clear a strike</ActionButton>
+                    <ActionButton onClick={() => setClientStatus(c.id, 'blocked')}>Block account</ActionButton>
+                    <ActionButton onClick={() => setClientStatus(c.id, 'warned')}>Warn by email</ActionButton>
+                    <ActionButton onClick={() => clearClientStrike(c.id)}>Clear a strike</ActionButton>
                   </>
                 )}
               </Card>

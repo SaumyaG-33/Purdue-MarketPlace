@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import DashboardNav from '../../components/DashboardNav'
 import { Button, Card, H3, Line, Mono, P, Tabs } from '../../components/ui'
-import { useStore } from '../../lib/store'
+import { api } from '../../lib/api'
 
 const ADMIN_LINKS = [
   { to: '/admin', label: 'Applications' },
@@ -11,18 +11,24 @@ const ADMIN_LINKS = [
 ]
 
 export default function FeedbackReports() {
-  const { state, dispatch } = useStore()
   const navigate = useNavigate()
   const [tab, setTab] = useState('reports')
+  const [openReports, setOpenReports] = useState([])
+  const [reviewFlags, setReviewFlags] = useState([])
 
-  const openReports = state.reports.filter((r) => r.status === 'open')
+  useEffect(() => {
+    api.get('/api/reports').then(setOpenReports).catch(() => {})
+    api.get('/api/review-flags').then(setReviewFlags).catch(() => {})
+  }, [])
 
-  function resolve(id, status) {
-    dispatch({ type: 'RESOLVE_REPORT', payload: { id, status } })
+  async function resolve(id, status) {
+    await api.patch(`/api/reports/${id}`, { status })
+    setOpenReports((rs) => rs.filter((r) => r.id !== id))
   }
 
-  function flagAction(id) {
-    dispatch({ type: 'REVIEW_FLAG_ACTION', payload: { id } })
+  async function flagAction(id, action) {
+    await api.patch(`/api/review-flags/${id}`, { action })
+    setReviewFlags((fs) => fs.filter((f) => f.id !== id))
   }
 
   return (
@@ -68,19 +74,19 @@ export default function FeedbackReports() {
             <Line />
             <H3>Reviews needing a look</H3>
             <div className="grid grid-cols-2 gap-3">
-              {state.reviewFlags.length === 0 && <Mono>Nothing flagged.</Mono>}
-              {state.reviewFlags.map((f) => (
+              {reviewFlags.length === 0 && <Mono>Nothing flagged.</Mono>}
+              {reviewFlags.map((f) => (
                 <Card key={f.id}>
                   <Mono>
                     {'★'.repeat(f.rating)}
-                    {'☆'.repeat(5 - f.rating)} · {f.source} {f.when && `· ${f.when}`}
+                    {'☆'.repeat(5 - f.rating)} · {f.source} {f.when && `· ${new Date(f.when).toLocaleDateString()}`}
                   </Mono>
                   <P>{f.text}</P>
                   <div className="flex gap-1.5">
-                    <Button variant="secondary" onClick={() => flagAction(f.id)}>
+                    <Button variant="secondary" onClick={() => flagAction(f.id, 'keep')}>
                       Keep
                     </Button>
-                    <Button variant="secondary" onClick={() => flagAction(f.id)}>
+                    <Button variant="secondary" onClick={() => flagAction(f.id, 'remove')}>
                       Remove
                     </Button>
                   </div>

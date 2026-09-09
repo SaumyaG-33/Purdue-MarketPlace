@@ -2,8 +2,8 @@ import { useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { signUp, confirmSignUp, resendSignUpCode, signIn } from 'aws-amplify/auth'
 import ClientNav from '../../components/ClientNav'
-import { Button, Card, Checkbox, Field, H2, H3, Line, Mono, P, Tabs } from '../../components/ui'
-import { useStore } from '../../lib/store'
+import { Button, Checkbox, Field, H2, H3, Mono, P, Tabs } from '../../components/ui'
+import { useAuth } from '../../lib/auth'
 
 const SCHOOL_DOMAINS = ['purdue.edu', 'ivytech.edu']
 
@@ -28,7 +28,7 @@ export default function Login() {
   const [params] = useSearchParams()
   const location = useLocation()
   const navigate = useNavigate()
-  const { dispatch } = useStore()
+  const { refresh } = useAuth()
 
   const [mode, setMode] = useState(params.get('mode') === 'signup' ? 'signup' : 'login')
   const [email, setEmail] = useState('')
@@ -42,7 +42,8 @@ export default function Login() {
   const holding = location.state?.holding
   const redirect = location.state?.redirect ?? '/account'
 
-  function goAfterAuth() {
+  async function goAfterAuth() {
+    await refresh()
     navigate(redirect)
   }
 
@@ -56,8 +57,7 @@ export default function Login() {
     setSubmitting(true)
     try {
       await signIn({ username: email, password })
-      dispatch({ type: 'LOGIN', payload: { email } })
-      goAfterAuth()
+      await goAfterAuth()
     } catch (err) {
       setError(err.message || 'Could not log in')
     } finally {
@@ -102,9 +102,7 @@ export default function Login() {
     try {
       await confirmSignUp({ username: email, confirmationCode: code })
       await signIn({ username: email, password })
-      dispatch({ type: 'SIGNUP', payload: { name, email } })
-      dispatch({ type: 'VERIFY_EMAIL' })
-      goAfterAuth()
+      await goAfterAuth()
     } catch (err) {
       setError(err.message || 'Could not verify code')
     } finally {
@@ -119,11 +117,6 @@ export default function Login() {
     } catch (err) {
       setError(err.message || 'Could not resend code')
     }
-  }
-
-  function quickLogin(demoEmail) {
-    dispatch({ type: 'LOGIN', payload: { email: demoEmail } })
-    goAfterAuth()
   }
 
   return (
@@ -179,20 +172,6 @@ export default function Login() {
                     {submitting ? 'Logging in…' : 'Log in & continue'}
                   </Button>
                   <Mono>Forgot password · Why do we need a school email?</Mono>
-
-                  <Line className="my-1" />
-                  <Mono>Quick demo logins</Mono>
-                  <div className="flex gap-2 flex-wrap">
-                    <Button type="button" variant="secondary" onClick={() => quickLogin('jdoe@purdue.edu')}>
-                      Client
-                    </Button>
-                    <Button type="button" variant="secondary" onClick={() => quickLogin('maya@purdue.edu')}>
-                      Provider
-                    </Button>
-                    <Button type="button" variant="secondary" onClick={() => quickLogin('admin@purdue.edu')}>
-                      Admin
-                    </Button>
-                  </div>
                 </form>
               ) : (
                 <form onSubmit={handleSignup} className="flex flex-col gap-3 p-5 bg-surface-muted">

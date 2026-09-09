@@ -1,18 +1,33 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import ClientNav from '../../components/ClientNav'
-import { Button, Card, H1, H2, H3, P, Mono, Line } from '../../components/ui'
+import { Button, Card, H1, H3, P, Mono, Line } from '../../components/ui'
 import { CATEGORIES } from '../../lib/data'
-import { useStore } from '../../lib/store'
+import { useAuth } from '../../lib/auth'
+import { api } from '../../lib/api'
 
 export default function Landing() {
   const navigate = useNavigate()
-  const { currentUser, state } = useStore()
+  const { currentUser } = useAuth()
   const [query, setQuery] = useState('')
+  const [upcoming, setUpcoming] = useState([])
 
-  const upcoming = currentUser
-    ? state.bookings.filter((b) => b.clientId === currentUser.id && (b.status === 'confirmed' || b.status === 'requested'))
-    : []
+  useEffect(() => {
+    if (!currentUser) {
+      setUpcoming([])
+      return
+    }
+    let cancelled = false
+    api
+      .get('/api/bookings/mine')
+      .then((bookings) => {
+        if (!cancelled) setUpcoming(bookings.filter((b) => b.status === 'confirmed' || b.status === 'requested'))
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [currentUser])
 
   function onSearch(e) {
     e.preventDefault()

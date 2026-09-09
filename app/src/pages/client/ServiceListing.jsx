@@ -1,14 +1,36 @@
+import { useEffect, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import ClientNav from '../../components/ClientNav'
 import { Button, Card, H2, H3, Line, Mono, P } from '../../components/ui'
-import { PROVIDERS } from '../../lib/data'
+import { api } from '../../lib/api'
 
 export default function ServiceListing() {
   const { providerId } = useParams()
   const [params] = useSearchParams()
   const navigate = useNavigate()
-  const provider = PROVIDERS[providerId]
+  const [provider, setProvider] = useState(null)
+  const [loading, setLoading] = useState(true)
   const dateOffset = params.get('date') ?? ''
+
+  useEffect(() => {
+    setLoading(true)
+    api
+      .get(`/api/providers/${providerId}`)
+      .then(setProvider)
+      .catch(() => setProvider(null))
+      .finally(() => setLoading(false))
+  }, [providerId])
+
+  if (loading) {
+    return (
+      <div className="min-h-screen">
+        <ClientNav />
+        <div className="p-6">
+          <Mono>Loading…</Mono>
+        </div>
+      </div>
+    )
+  }
 
   if (!provider) {
     return (
@@ -48,7 +70,9 @@ export default function ServiceListing() {
           <div className="flex gap-2">
             <Button>Request a booking</Button>
             <Button variant="secondary">Message</Button>
-            <Button variant="ghost">Report</Button>
+            <Button variant="ghost" onClick={() => navigate('/account/report', { state: { providerId, providerName: provider.name } })}>
+              Report
+            </Button>
           </div>
         </div>
       </div>
@@ -86,7 +110,7 @@ export default function ServiceListing() {
             <Card key={r.id}>
               <Mono>
                 {'★'.repeat(r.rating)}
-                {'☆'.repeat(5 - r.rating)} · {r.author} · {r.when}
+                {'☆'.repeat(5 - r.rating)} · {r.author} · {new Date(r.when).toLocaleDateString()}
               </Mono>
               <P>{r.text}</P>
             </Card>

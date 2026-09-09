@@ -1,5 +1,6 @@
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
-import { StoreProvider } from './lib/store'
+import { AuthProvider } from './lib/auth'
+import { PendingBookingProvider } from './lib/pendingBooking'
 import RequireAdmin from './components/RequireAdmin'
 
 import Landing from './pages/client/Landing'
@@ -29,9 +30,10 @@ import Suspensions from './pages/admin/Suspensions'
 
 export default function App() {
   return (
-    <StoreProvider>
-      <BrowserRouter>
-        <Routes>
+    <AuthProvider>
+      <PendingBookingProvider>
+        <BrowserRouter>
+          <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/categories" element={<Categories />} />
           <Route path="/browse/:categoryId" element={<CategoryBrowse />} />
@@ -84,8 +86,9 @@ export default function App() {
               </RequireAdmin>
             }
           />
-        </Routes>
-      </BrowserRouter>
-    </StoreProvider>
+          </Routes>
+        </BrowserRouter>
+      </PendingBookingProvider>
+    </AuthProvider>
   )
 }

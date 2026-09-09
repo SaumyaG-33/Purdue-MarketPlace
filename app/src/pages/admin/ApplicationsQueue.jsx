@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import DashboardNav from '../../components/DashboardNav'
 import { Chip, Mono } from '../../components/ui'
-import { useStore } from '../../lib/store'
+import { api } from '../../lib/api'
 
 const ADMIN_LINKS = [
   { to: '/admin', label: 'Applications' },
@@ -13,20 +13,28 @@ const ADMIN_LINKS = [
 const FILTERS = ['Pending', 'Needs info', 'Approved', 'Rejected']
 const STATUS_MAP = { Pending: 'pending', 'Needs info': 'needs_info', Approved: 'approved', Rejected: 'rejected' }
 
+function ageDaysOf(submittedAt) {
+  return Math.floor((Date.now() - new Date(submittedAt).getTime()) / 86400000)
+}
+
 export default function ApplicationsQueue() {
-  const { state } = useStore()
+  const [applications, setApplications] = useState([])
   const navigate = useNavigate()
   const [filter, setFilter] = useState('Pending')
   const [search, setSearch] = useState('')
 
-  const filtered = state.applications.filter((a) => {
+  useEffect(() => {
+    api.get('/api/applications').then(setApplications).catch(() => {})
+  }, [])
+
+  const filtered = applications.filter((a) => {
     if (a.status !== STATUS_MAP[filter]) return false
     if (!search) return true
     return a.businessName.toLowerCase().includes(search.toLowerCase()) || a.ownerName.toLowerCase().includes(search.toLowerCase())
   })
 
   const counts = FILTERS.reduce((acc, f) => {
-    acc[f] = state.applications.filter((a) => a.status === STATUS_MAP[f]).length
+    acc[f] = applications.filter((a) => a.status === STATUS_MAP[f]).length
     return acc
   }, {})
 
@@ -62,21 +70,26 @@ export default function ApplicationsQueue() {
               <Mono>Nothing in this filter.</Mono>
             </div>
           )}
-          {filtered.map((a) => (
-            <div
-              key={a.id}
-              onClick={() => navigate(`/admin/applications/${a.id}`)}
-              className="grid grid-cols-[1.4fr_1fr_1fr_0.9fr_0.8fr] border-t border-border cursor-pointer hover:bg-surface-muted"
-            >
-              <p className="text-[12px] p-2">{a.businessName}</p>
-              <p className="text-[12px] p-2">
-                {a.ownerName} · {a.email}
-              </p>
-              <p className="text-[12px] p-2 capitalize">{a.category}</p>
-              <p className="text-[12px] p-2">{a.docs.length ? a.docs.join(', ') : '—'}</p>
-              <p className={`text-[12px] p-2 ${a.ageDays > 3 ? 'text-[#8e793e] font-semibold' : ''}`}>{a.ageDays} day{a.ageDays === 1 ? '' : 's'}</p>
-            </div>
-          ))}
+          {filtered.map((a) => {
+            const ageDays = ageDaysOf(a.submittedAt)
+            return (
+              <div
+                key={a.id}
+                onClick={() => navigate(`/admin/applications/${a.id}`)}
+                className="grid grid-cols-[1.4fr_1fr_1fr_0.9fr_0.8fr] border-t border-border cursor-pointer hover:bg-surface-muted"
+              >
+                <p className="text-[12px] p-2">{a.businessName}</p>
+                <p className="text-[12px] p-2">
+                  {a.ownerName} · {a.email}
+                </p>
+                <p className="text-[12px] p-2 capitalize">{a.category}</p>
+                <p className="text-[12px] p-2">{a.docs.length ? a.docs.join(', ') : '—'}</p>
+                <p className={`text-[12px] p-2 ${ageDays > 3 ? 'text-[#8e793e] font-semibold' : ''}`}>
+                  {ageDays} day{ageDays === 1 ? '' : 's'}
+                </p>
+              </div>
+            )
+          })}
         </div>
         <Mono>Rows older than 3 days flag amber — the credibility promise is the review turnaround.</Mono>
       </div>

@@ -1,15 +1,21 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import ClientNav from '../../components/ClientNav'
 import { Button, Card, H3, Mono, P, Tabs } from '../../components/ui'
-import { useStore } from '../../lib/store'
-import { dateForOffset } from '../../lib/data'
-import { firstNameOf, formatDay, minutesToLabel } from '../../lib/format'
+import { useAuth } from '../../lib/auth'
+import { api } from '../../lib/api'
+import { firstNameOf, formatDay, timeLabel } from '../../lib/format'
 
 export default function MyAccount() {
-  const { state, currentUser } = useStore()
+  const { currentUser } = useAuth()
   const [tab, setTab] = useState('upcoming')
+  const [bookings, setBookings] = useState([])
   const navigate = useNavigate()
+
+  useEffect(() => {
+    if (!currentUser) return
+    api.get('/api/bookings/mine').then(setBookings).catch(() => {})
+  }, [currentUser])
 
   if (!currentUser) {
     return (
@@ -23,9 +29,8 @@ export default function MyAccount() {
     )
   }
 
-  const mine = state.bookings.filter((b) => b.clientId === currentUser.id)
-  const upcoming = mine.filter((b) => b.status === 'confirmed' || b.status === 'requested')
-  const past = mine.filter((b) => b.status === 'completed' || b.status === 'cancelled' || b.status === 'declined')
+  const upcoming = bookings.filter((b) => b.status === 'confirmed' || b.status === 'requested')
+  const past = bookings.filter((b) => b.status === 'completed' || b.status === 'cancelled' || b.status === 'declined')
 
   return (
     <div className="min-h-screen">
@@ -50,11 +55,11 @@ export default function MyAccount() {
                 <div className="w-13 h-13 bg-box border border-border-soft rounded-md flex-none" style={{ width: 52, height: 52 }} />
                 <div className="flex-1">
                   <H3>
-                    {b.serviceName} · {b.providerName ?? state.providers[b.providerId]?.name}
+                    {b.serviceName} · {b.providerName}
                   </H3>
                   <Mono>
-                    {formatDay(dateForOffset(b.dayOffset))}, {minutesToLabel(b.start)} ·{' '}
-                    {b.status === 'confirmed' ? 'Confirmed' : `Pending — waiting on ${firstNameOf(b.providerName ?? state.providers[b.providerId]?.name)}`} · ${b.price}
+                    {formatDay(new Date(b.startAt))}, {timeLabel(new Date(b.startAt))} ·{' '}
+                    {b.status === 'confirmed' ? 'Confirmed' : `Pending — waiting on ${firstNameOf(b.providerName)}`} · ${b.price}
                   </Mono>
                 </div>
                 <Button variant="secondary">Message</Button>
@@ -84,7 +89,7 @@ export default function MyAccount() {
           <Card className="max-w-md">
             <H3>{currentUser.name}</H3>
             <Mono>{currentUser.email}</Mono>
-            <Mono>{currentUser.verified ? 'Verified' : 'Not verified'}</Mono>
+            <Mono>Verified</Mono>
           </Card>
         )}
 

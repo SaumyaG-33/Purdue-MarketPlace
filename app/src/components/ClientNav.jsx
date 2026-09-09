@@ -1,9 +1,9 @@
 import { Link, useNavigate } from 'react-router-dom'
-import { useStore } from '../lib/store'
+import { useAuth } from '../lib/auth'
 import { Button } from './ui'
 
 export default function ClientNav({ search }) {
-  const { currentUser, dispatch } = useStore()
+  const { currentUser, signOut } = useAuth()
   const navigate = useNavigate()
 
   return (
@@ -42,7 +42,7 @@ export default function ClientNav({ search }) {
           </Link>
           <span
             onClick={() => {
-              dispatch({ type: 'LOGOUT' })
+              signOut()
               navigate('/')
             }}
             className="w-6 h-6 rounded-full bg-box border border-border-soft flex-none cursor-pointer"

@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import ClientNav from '../../components/ClientNav'
-import { Box, Button, Card, Checkbox, Field, H2, H3, Line, Mono, P, Select, TextArea } from '../../components/ui'
-import { useStore } from '../../lib/store'
+import { Box, Button, Card, Checkbox, Field, H2, H3, Mono, P, Select, TextArea } from '../../components/ui'
 import { useMyProvider } from '../../lib/useMyProvider'
+import { useAuth } from '../../lib/auth'
+import { api } from '../../lib/api'
 import { CATEGORIES } from '../../lib/data'
 
-function ApplicationForm({ currentUser, dispatch }) {
+function ApplicationForm({ currentUser, onSubmitted }) {
   const [businessName, setBusinessName] = useState('')
   const [category, setCategory] = useState(CATEGORIES[0].id)
   const [ownerName, setOwnerName] = useState(currentUser?.name ?? '')
@@ -16,26 +17,24 @@ function ApplicationForm({ currentUser, dispatch }) {
   const [description, setDescription] = useState('')
   const [agreed, setAgreed] = useState(false)
   const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault()
     if (!agreed) {
       setError('Please accept the provider terms to submit.')
       return
     }
-    dispatch({
-      type: 'SUBMIT_APPLICATION',
-      payload: {
-        businessName,
-        category,
-        ownerName,
-        email: currentUser.email,
-        phone,
-        priceRange,
-        servicesText,
-        description,
-      },
-    })
+    setError('')
+    setSubmitting(true)
+    try {
+      await api.post('/api/applications', { businessName, category, ownerName, phone, priceRange, servicesText, description })
+      await onSubmitted()
+    } catch (err) {
+      setError(err.message || 'Could not submit application')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -131,8 +130,8 @@ function ApplicationForm({ currentUser, dispatch }) {
       {error && <P className="text-red-600">{error}</P>}
 
       <div className="flex gap-2">
-        <Button type="submit" className="px-6">
-          Submit application
+        <Button type="submit" className="px-6" disabled={submitting}>
+          {submitting ? 'Submitting…' : 'Submit application'}
         </Button>
         <Button type="button" variant="secondary">
           Save draft
@@ -189,8 +188,8 @@ function StatusCard({ application, navigate }) {
 }
 
 export default function Provide() {
-  const { currentUser, dispatch } = useStore()
-  const { provider, application } = useMyProvider()
+  const { currentUser } = useAuth()
+  const { provider, application, loading, refetchApplication } = useMyProvider()
   const navigate = useNavigate()
 
   if (provider) return <Navigate to="/provider/calendar" replace />
@@ -207,6 +206,17 @@ export default function Provide() {
     )
   }
 
+  if (loading) {
+    return (
+      <div className="min-h-screen">
+        <ClientNav />
+        <div className="p-6">
+          <Mono>Loading…</Mono>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen">
       <ClientNav />
@@ -215,7 +225,7 @@ export default function Provide() {
           <StatusCard application={application} navigate={navigate} />
         </div>
       ) : (
-        <ApplicationForm currentUser={currentUser} dispatch={dispatch} />
+        <ApplicationForm currentUser={currentUser} onSubmitted={refetchApplication} />
       )}
     </div>
   )

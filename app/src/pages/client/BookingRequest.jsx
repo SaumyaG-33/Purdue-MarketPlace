@@ -2,22 +2,25 @@ import { useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import ClientNav from '../../components/ClientNav'
 import { Button, Card, Checkbox, Field, H2, H3, Line, Mono, P } from '../../components/ui'
-import { useStore } from '../../lib/store'
+import { useAuth } from '../../lib/auth'
+import { usePendingBooking } from '../../lib/pendingBooking'
+import { api } from '../../lib/api'
 import { formatDay, labelRange } from '../../lib/format'
 import { dateForOffset } from '../../lib/data'
 
 export default function BookingRequest() {
-  const { state, currentUser, dispatch } = useStore()
+  const { currentUser } = useAuth()
+  const { pendingBooking: pb } = usePendingBooking()
   const navigate = useNavigate()
   const [comments, setComments] = useState('')
   const [confirmationId, setConfirmationId] = useState('')
   const [agreed, setAgreed] = useState(false)
   const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
 
-  const pb = state.pendingBooking
   if (!pb || !currentUser) return <Navigate to="/categories" replace />
 
-  function handleSend(e) {
+  async function handleSend(e) {
     e.preventDefault()
     if (!agreed) {
       setError('Please agree to the terms and cancellation policy.')
@@ -27,25 +30,28 @@ export default function BookingRequest() {
       setError('Add the deposit confirmation number to send the request.')
       return
     }
-    const booking = {
-      clientId: currentUser.id,
-      clientName: currentUser.name,
-      clientEmail: currentUser.email,
-      providerId: pb.providerId,
-      providerName: pb.providerName,
-      serviceId: pb.serviceId,
-      serviceName: pb.serviceName,
-      dayOffset: pb.dayOffset,
-      start: pb.start,
-      duration: pb.duration,
-      price: pb.price,
-      deposit: pb.deposit,
-      depositPaid: pb.deposit > 0,
-      status: 'confirmed',
-      comments,
+    setError('')
+    setSubmitting(true)
+    const startAt = new Date(dateForOffset(pb.dayOffset).getTime() + pb.start * 60000)
+    try {
+      const booking = await api.post('/api/bookings', {
+        providerId: pb.providerId,
+        providerName: pb.providerName,
+        serviceId: pb.serviceId,
+        serviceName: pb.serviceName,
+        startAt: startAt.toISOString(),
+        durationMinutes: pb.duration,
+        price: pb.price,
+        deposit: pb.deposit,
+        depositPaid: pb.deposit > 0,
+        comments,
+      })
+      navigate('/confirmed', { state: { booking } })
+    } catch (err) {
+      setError(err.message || 'Could not send the booking request')
+    } finally {
+      setSubmitting(false)
     }
-    dispatch({ type: 'CREATE_BOOKING', payload: booking })
-    navigate('/confirmed', { state: { booking } })
   }
 
   const day = dateForOffset(pb.dayOffset)
@@ -87,8 +93,8 @@ export default function BookingRequest() {
           {error && <P className="text-red-600">{error}</P>}
 
           <div className="flex gap-2">
-            <Button type="submit" className="px-6">
-              Send request
+            <Button type="submit" className="px-6" disabled={submitting}>
+              {submitting ? 'Sending…' : 'Send request'}
             </Button>
             <Button type="button" variant="secondary" onClick={() => navigate(-1)}>
               Cancel

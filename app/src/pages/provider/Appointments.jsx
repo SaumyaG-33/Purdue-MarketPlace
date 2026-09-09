@@ -1,10 +1,10 @@
+import { useEffect, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import DashboardNav from '../../components/DashboardNav'
 import { Card, H3, Mono } from '../../components/ui'
 import { useMyProvider } from '../../lib/useMyProvider'
-import { useStore } from '../../lib/store'
-import { dateForOffset } from '../../lib/data'
-import { formatDay, minutesToLabel } from '../../lib/format'
+import { api } from '../../lib/api'
+import { formatDay, timeLabel } from '../../lib/format'
 
 const PROVIDER_LINKS = [
   { to: '/provider/calendar', label: 'Schedule' },
@@ -14,13 +14,17 @@ const PROVIDER_LINKS = [
 
 export default function Appointments() {
   const { provider } = useMyProvider()
-  const { state } = useStore()
+  const [all, setAll] = useState([])
   const navigate = useNavigate()
+
+  useEffect(() => {
+    if (!provider) return
+    api.get('/api/bookings/provider').then(setAll).catch(() => {})
+  }, [provider])
 
   if (!provider) return <Navigate to="/provide" replace />
 
-  const requests = state.bookings.filter((b) => b.providerId === provider.id && b.status === 'requested')
-  const all = state.bookings.filter((b) => b.providerId === provider.id)
+  const requests = all.filter((b) => b.status === 'requested')
 
   return (
     <div className="min-h-screen">
@@ -40,7 +44,7 @@ export default function Appointments() {
                   {b.serviceName} · {b.clientName}
                 </H3>
                 <Mono>
-                  {formatDay(dateForOffset(b.dayOffset))} · {minutesToLabel(b.start)} · ${b.price}
+                  {formatDay(new Date(b.startAt))} · {timeLabel(new Date(b.startAt))} · ${b.price}
                 </Mono>
               </div>
               <span className="text-[12px] font-semibold border border-border-card rounded-md px-3 py-1.5 bg-white">Open</span>
@@ -57,7 +61,7 @@ export default function Appointments() {
                   {b.serviceName} · {b.clientName}
                 </H3>
                 <Mono>
-                  {formatDay(dateForOffset(b.dayOffset))} · {minutesToLabel(b.start)} · {b.status}
+                  {formatDay(new Date(b.startAt))} · {timeLabel(new Date(b.startAt))} · {b.status}
                 </Mono>
               </div>
             </Card>

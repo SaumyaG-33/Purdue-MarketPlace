@@ -1,11 +1,11 @@
-import { Fragment, useMemo } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import DashboardNav from '../../components/DashboardNav'
-import { Card, H3, Mono, P } from '../../components/ui'
+import { Card, H3, Mono } from '../../components/ui'
 import { useMyProvider } from '../../lib/useMyProvider'
-import { useStore } from '../../lib/store'
+import { api } from '../../lib/api'
 import { dateForOffset } from '../../lib/data'
-import { formatDayShort, minutesToLabel } from '../../lib/format'
+import { formatDayShort, timeLabel, dayOffsetOf } from '../../lib/format'
 
 const HOURS = Array.from({ length: 12 }, (_, i) => 9 + i) // 9am - 8pm
 const DAY_OFFSETS = [0, 1, 2, 3, 4, 5, 6]
@@ -22,21 +22,25 @@ function cellKey(day, hour) {
 
 export default function Calendar() {
   const { provider } = useMyProvider()
-  const { state } = useStore()
+  const [myBookings, setMyBookings] = useState([])
   const navigate = useNavigate()
 
-  if (!provider) return <Navigate to="/provide" replace />
-
-  const myBookings = state.bookings.filter((b) => b.providerId === provider.id)
+  useEffect(() => {
+    if (!provider) return
+    api.get('/api/bookings/provider').then(setMyBookings).catch(() => {})
+  }, [provider])
 
   const cellStatus = useMemo(() => {
     const map = new Map()
     myBookings.forEach((b) => {
       if (b.status !== 'confirmed' && b.status !== 'requested') return
-      const startHour = Math.floor(b.start / 60)
-      const endHour = Math.ceil((b.start + b.duration) / 60)
+      const start = new Date(b.startAt)
+      const startMinutes = start.getHours() * 60 + start.getMinutes()
+      const startHour = Math.floor(startMinutes / 60)
+      const endHour = Math.ceil((startMinutes + b.durationMinutes) / 60)
+      const day = dayOffsetOf(start)
       for (let h = startHour; h < endHour; h++) {
-        const key = cellKey(b.dayOffset, h)
+        const key = cellKey(day, h)
         if (b.status === 'confirmed') map.set(key, 'booked')
         else if (!map.has(key)) map.set(key, 'requested')
       }
@@ -44,9 +48,11 @@ export default function Calendar() {
     return map
   }, [myBookings])
 
+  if (!provider) return <Navigate to="/provide" replace />
+
   const upcoming = myBookings
     .filter((b) => b.status === 'confirmed' || b.status === 'requested')
-    .sort((a, b) => a.dayOffset - b.dayOffset || a.start - b.start)
+    .sort((a, b) => new Date(a.startAt) - new Date(b.startAt))
 
   const weekBookings = myBookings.filter((b) => b.status === 'confirmed' || b.status === 'requested')
   const expected = weekBookings.reduce((sum, b) => sum + b.price, 0)
@@ -120,7 +126,7 @@ export default function Calendar() {
             }`}
           >
             <Mono className="w-[100px]">
-              {formatDayShort(dateForOffset(b.dayOffset))} {minutesToLabel(b.start)}
+              {formatDayShort(new Date(b.startAt))} {timeLabel(new Date(b.startAt))}
             </Mono>
             <div className="w-8 h-8 bg-box border border-border-soft rounded-md flex-none" />
             <div className="flex-1">
@@ -129,7 +135,7 @@ export default function Calendar() {
               </H3>
               <Mono>
                 {b.status === 'confirmed'
-                  ? `${b.duration} min · $${b.price} · $${b.deposit} deposit ${b.depositPaid ? 'received' : 'pending'}`
+                  ? `${b.durationMinutes} min · $${b.price} · $${b.deposit} deposit ${b.depositPaid ? 'received' : 'pending'}`
                   : 'Requested — respond by tonight'}
               </Mono>
             </div>

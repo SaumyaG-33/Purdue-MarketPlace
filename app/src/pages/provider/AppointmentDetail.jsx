@@ -1,10 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import DashboardNav from '../../components/DashboardNav'
-import { Button, Card, Checkbox, Field, H2, H3, Line, Mono, P, Select, TextArea } from '../../components/ui'
+import { Button, Card, Checkbox, H2, H3, Line, Mono, P, Select, TextArea } from '../../components/ui'
 import { useMyProvider } from '../../lib/useMyProvider'
-import { useStore } from '../../lib/store'
-import { dateForOffset } from '../../lib/data'
+import { api } from '../../lib/api'
 import { formatDay, labelRange } from '../../lib/format'
 
 const PROVIDER_LINKS = [
@@ -15,41 +14,65 @@ const PROVIDER_LINKS = [
 
 export default function AppointmentDetail() {
   const { provider } = useMyProvider()
-  const { state, dispatch } = useStore()
   const { bookingId } = useParams()
   const navigate = useNavigate()
 
+  const [booking, setBooking] = useState(null)
+  const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState('')
   const [reason, setReason] = useState('Sick')
   const [note, setNote] = useState('')
   const [refund, setRefund] = useState(false)
   const [offerNext, setOfferNext] = useState(false)
 
+  useEffect(() => {
+    setLoading(true)
+    api
+      .get(`/api/bookings/${bookingId}`)
+      .then(setBooking)
+      .catch(() => setBooking(null))
+      .finally(() => setLoading(false))
+  }, [bookingId])
+
   if (!provider) return <Navigate to="/provide" replace />
+  if (loading) {
+    return (
+      <div className="min-h-screen">
+        <DashboardNav mode="provider" tag={`${provider.name} · approved`} links={PROVIDER_LINKS} />
+        <div className="p-6">
+          <Mono>Loading…</Mono>
+        </div>
+      </div>
+    )
+  }
+  if (!booking || booking.providerId !== provider.id) return <Navigate to="/provider/calendar" replace />
 
-  const booking = state.bookings.find((b) => b.id === bookingId && b.providerId === provider.id)
-  if (!booking) return <Navigate to="/provider/calendar" replace />
+  const start = new Date(booking.startAt)
 
-  const day = dateForOffset(booking.dayOffset)
-
-  function sendMessage(e) {
+  async function sendMessage(e) {
     e.preventDefault()
     if (!message.trim()) return
-    dispatch({ type: 'ADD_BOOKING_MESSAGE', payload: { id: booking.id, text: message } })
+    const updated = await api.post(`/api/bookings/${booking.id}/messages`, { text: message })
+    setBooking(updated)
     setMessage('')
   }
 
-  function handleCancel(e) {
+  async function updateStatus(status) {
+    const updated = await api.patch(`/api/bookings/${booking.id}/status`, { status })
+    setBooking(updated)
+  }
+
+  async function handleCancel(e) {
     e.preventDefault()
-    dispatch({ type: 'UPDATE_BOOKING_STATUS', payload: { id: booking.id, status: 'cancelled' } })
+    await updateStatus('cancelled')
     navigate('/provider/calendar')
   }
 
-  function accept() {
-    dispatch({ type: 'UPDATE_BOOKING_STATUS', payload: { id: booking.id, status: 'confirmed' } })
+  async function accept() {
+    await updateStatus('confirmed')
   }
-  function decline() {
-    dispatch({ type: 'UPDATE_BOOKING_STATUS', payload: { id: booking.id, status: 'declined' } })
+  async function decline() {
+    await updateStatus('declined')
     navigate('/provider/calendar')
   }
 
@@ -70,7 +93,7 @@ export default function AppointmentDetail() {
               {booking.serviceName} · {booking.clientName}
             </H2>
             <Mono>
-              {formatDay(day)} · {labelRange(booking.start, booking.duration)} ·{' '}
+              {formatDay(start)} · {labelRange(start.getHours() * 60 + start.getMinutes(), booking.durationMinutes)} ·{' '}
               {booking.status === 'confirmed' ? 'Confirmed' : booking.status}
             </Mono>
           </div>

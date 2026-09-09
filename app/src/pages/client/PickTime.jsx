@@ -1,28 +1,53 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import ClientNav from '../../components/ClientNav'
 import { Button, H2, H3, Line, Mono, P, Slot } from '../../components/ui'
-import { PROVIDERS, getSlotsForDay, dateForOffset } from '../../lib/data'
+import { getSlotsForDay, dateForOffset } from '../../lib/data'
 import { formatDay, labelRange, minutesToLabel } from '../../lib/format'
-import { useStore } from '../../lib/store'
+import { useAuth } from '../../lib/auth'
+import { usePendingBooking } from '../../lib/pendingBooking'
+import { api } from '../../lib/api'
 
 export default function PickTime() {
   const { providerId, serviceId } = useParams()
   const [params] = useSearchParams()
   const navigate = useNavigate()
-  const { currentUser, dispatch } = useStore()
+  const { currentUser } = useAuth()
+  const { setPendingBooking } = usePendingBooking()
 
-  const provider = PROVIDERS[providerId]
-  const service = provider?.services.find((s) => s.id === serviceId)
+  const [provider, setProvider] = useState(null)
+  const [loading, setLoading] = useState(true)
   const startOffset = Number(params.get('date') ?? 0)
+
+  useEffect(() => {
+    setLoading(true)
+    api
+      .get(`/api/providers/${providerId}`)
+      .then(setProvider)
+      .catch(() => setProvider(null))
+      .finally(() => setLoading(false))
+  }, [providerId])
+
+  const service = provider?.services.find((s) => s.id === serviceId)
 
   const dayOffsets = [startOffset, startOffset + 1, startOffset + 2]
   const [selected, setSelected] = useState(null)
 
   const daySlots = useMemo(
-    () => dayOffsets.map((offset) => ({ offset, slots: getSlotsForDay(providerId, serviceId, offset) })),
-    [providerId, serviceId, startOffset],
+    () => (service ? dayOffsets.map((offset) => ({ offset, slots: getSlotsForDay(providerId, service, offset) })) : []),
+    [providerId, service, startOffset],
   )
+
+  if (loading) {
+    return (
+      <div className="min-h-screen">
+        <ClientNav />
+        <div className="p-6">
+          <Mono>Loading…</Mono>
+        </div>
+      </div>
+    )
+  }
 
   if (!provider || !service) {
     return (
@@ -36,20 +61,17 @@ export default function PickTime() {
   }
 
   function handleContinue() {
-    dispatch({
-      type: 'SET_PENDING_BOOKING',
-      payload: {
-        providerId,
-        providerName: provider.name,
-        serviceId,
-        serviceName: service.name,
-        dayOffset: selected.offset,
-        start: selected.slot.start,
-        duration: service.duration,
-        price: service.price,
-        deposit: service.deposit,
-        area: provider.area,
-      },
+    setPendingBooking({
+      providerId,
+      providerName: provider.name,
+      serviceId,
+      serviceName: service.name,
+      dayOffset: selected.offset,
+      start: selected.slot.start,
+      duration: service.duration,
+      price: Number(service.price),
+      deposit: Number(service.deposit),
+      area: provider.area,
     })
     if (!currentUser) {
       navigate('/login', {

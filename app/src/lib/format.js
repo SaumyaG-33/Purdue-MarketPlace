@@ -36,3 +36,21 @@ export function firstNameOf(name) {
   if (!name) return ''
   return name.replace(/[’']s\b/, '').split(' ')[0]
 }
+
+// Helpers for real timestamps coming back from the API (ISO strings), as
+// opposed to the dayOffset+minutes-since-midnight shape used by the local
+// mock slot picker before a booking is actually created server-side.
+export function timeLabel(date) {
+  return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+}
+
+export function rangeLabel(startDate, durationMinutes) {
+  const end = new Date(startDate.getTime() + durationMinutes * 60000)
+  return `${timeLabel(startDate)} – ${timeLabel(end)}`
+}
+
+export function dayOffsetOf(date) {
+  const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  return Math.round((startOfDay(date) - startOfDay(new Date())) / DAY_MS)
+}
+

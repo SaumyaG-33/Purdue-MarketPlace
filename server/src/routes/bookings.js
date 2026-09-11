@@ -25,7 +25,11 @@ function canAccess(booking, req) {
 
 // Bookings the current user made as a client
 router.get('/mine', async (req, res) => {
-  const { rows } = await query('SELECT * FROM bookings WHERE client_id = $1 ORDER BY start_at DESC', [req.user.id])
+  const { rows } = await query(
+    `SELECT b.*, EXISTS(SELECT 1 FROM reviews r WHERE r.booking_id = b.id) AS reviewed
+     FROM bookings b WHERE b.client_id = $1 ORDER BY b.start_at DESC`,
+    [req.user.id],
+  )
   res.json(rows)
 })
 
@@ -79,6 +83,25 @@ router.patch('/:id/status', async (req, res) => {
   if (!canAccess(booking, req)) return res.status(403).json({ error: 'Forbidden' })
 
   const { rows } = await query('UPDATE bookings SET status = $1 WHERE id = $2 RETURNING *', [status, req.params.id])
+  res.json(rows[0])
+})
+
+router.patch('/:id/reschedule', async (req, res) => {
+  const { startAt } = req.body
+  if (!startAt || Number.isNaN(new Date(startAt).getTime())) return res.status(400).json({ error: 'Valid startAt required' })
+
+  const { rows: existing } = await query(
+    `SELECT b.*, p.email AS provider_email FROM bookings b LEFT JOIN providers p ON p.id = b.provider_id WHERE b.id = $1`,
+    [req.params.id],
+  )
+  const booking = existing[0]
+  if (!booking) return res.status(404).json({ error: 'Not found' })
+  if (!canAccess(booking, req)) return res.status(403).json({ error: 'Forbidden' })
+  if (!['requested', 'confirmed'].includes(booking.status)) {
+    return res.status(400).json({ error: 'Only requested or confirmed bookings can be rescheduled' })
+  }
+
+  const { rows } = await query('UPDATE bookings SET start_at = $1 WHERE id = $2 RETURNING *', [startAt, req.params.id])
   res.json(rows[0])
 })
 

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { signUp, confirmSignUp, resendSignUpCode, signIn } from 'aws-amplify/auth'
+import { signUp, confirmSignUp, resendSignUpCode, signIn, signOut } from 'aws-amplify/auth'
 import ClientNav from '../../components/ClientNav'
 import { Button, Checkbox, Field, H2, H3, Mono, P, Tabs } from '../../components/ui'
 import { useAuth } from '../../lib/auth'
@@ -12,6 +12,22 @@ const PASSWORD_HINT = 'At least 8 characters, with an uppercase letter, a lowerc
 function isSchoolEmail(email) {
   const domain = email.split('@')[1]?.toLowerCase()
   return SCHOOL_DOMAINS.includes(domain)
+}
+
+// Amplify refuses to sign in while a Cognito session already exists in the
+// browser (stale login, different account, etc.) — it throws instead of just
+// switching accounts. Clear the stale session and retry once.
+async function signInFresh(username, password) {
+  try {
+    await signIn({ username, password })
+  } catch (err) {
+    if (err.name === 'UserAlreadyAuthenticatedException') {
+      await signOut()
+      await signIn({ username, password })
+    } else {
+      throw err
+    }
+  }
 }
 
 function isValidPassword(password) {
@@ -56,7 +72,7 @@ export default function Login() {
     setError('')
     setSubmitting(true)
     try {
-      await signIn({ username: email, password })
+      await signInFresh(email, password)
       await goAfterAuth()
     } catch (err) {
       setError(err.message || 'Could not log in')
@@ -101,7 +117,7 @@ export default function Login() {
     setSubmitting(true)
     try {
       await confirmSignUp({ username: email, confirmationCode: code })
-      await signIn({ username: email, password })
+      await signInFresh(email, password)
       await goAfterAuth()
     } catch (err) {
       setError(err.message || 'Could not verify code')
@@ -155,7 +171,7 @@ export default function Login() {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="you@purdue.edu"
-                      className="border border-border-field bg-surface-muted rounded-md px-3 py-2.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-gold"
+                      className="border border-border-field bg-surface-muted rounded-md px-3 py-2.5 text-[13px] placeholder:text-text-mono focus:outline-none focus:ring-2 focus:ring-gold"
                     />
                   </Field>
                   <Field label="Password">
@@ -164,7 +180,7 @@ export default function Login() {
                       type="password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="border border-border-field bg-surface-muted rounded-md px-3 py-2.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-gold"
+                      className="border border-border-field bg-surface-muted rounded-md px-3 py-2.5 text-[13px] placeholder:text-text-mono focus:outline-none focus:ring-2 focus:ring-gold"
                     />
                   </Field>
                   {error && <P className="text-red-600">{error}</P>}
@@ -181,7 +197,7 @@ export default function Login() {
                       required
                       value={name}
                       onChange={(e) => setName(e.target.value)}
-                      className="border border-border-field bg-white rounded-md px-3 py-2.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-gold"
+                      className="border border-border-field bg-white rounded-md px-3 py-2.5 text-[13px] placeholder:text-text-mono focus:outline-none focus:ring-2 focus:ring-gold"
                     />
                   </Field>
                   <Field label="School email">
@@ -191,7 +207,7 @@ export default function Login() {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="you@purdue.edu"
-                      className="border border-border-field bg-white rounded-md px-3 py-2.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-gold"
+                      className="border border-border-field bg-white rounded-md px-3 py-2.5 text-[13px] placeholder:text-text-mono focus:outline-none focus:ring-2 focus:ring-gold"
                     />
                   </Field>
                   <Field label="Password">
@@ -201,7 +217,7 @@ export default function Login() {
                       minLength={8}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="border border-border-field bg-white rounded-md px-3 py-2.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-gold"
+                      className="border border-border-field bg-white rounded-md px-3 py-2.5 text-[13px] placeholder:text-text-mono focus:outline-none focus:ring-2 focus:ring-gold"
                     />
                   </Field>
                   <Mono>{PASSWORD_HINT}</Mono>
@@ -228,7 +244,7 @@ export default function Login() {
                   value={code}
                   onChange={(e) => setCode(e.target.value)}
                   placeholder="123456"
-                  className="border border-border-field bg-surface-muted rounded-md px-3 py-2.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-gold"
+                  className="border border-border-field bg-surface-muted rounded-md px-3 py-2.5 text-[13px] placeholder:text-text-mono focus:outline-none focus:ring-2 focus:ring-gold"
                 />
               </Field>
               {error && <P className="text-red-600">{error}</P>}

@@ -99,6 +99,7 @@ CREATE TABLE IF NOT EXISTS reports (
 CREATE TABLE IF NOT EXISTS reviews (
   id TEXT PRIMARY KEY,
   provider_id TEXT NOT NULL REFERENCES providers(id) ON DELETE CASCADE,
+  booking_id TEXT REFERENCES bookings(id),
   author TEXT,
   rating INT NOT NULL,
   body TEXT,
